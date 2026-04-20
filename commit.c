@@ -211,6 +211,12 @@ int head_update(const ObjectID *new_commit) {
     commit.timestamp = time(NULL);
 
     strncpy(commit.message, message, sizeof(commit.message) - 1);
+    // 5. Serialize commit
+    void *data;
+    size_t len;
+    if (commit_serialize(&commit, &data, &len) != 0) {
+        return -1;
+    }
 
     return 0;
 }
