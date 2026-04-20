@@ -141,22 +141,37 @@ static int compare_paths(const void *a, const void *b) {
 }
 
 int index_save(const Index *index) {
-    // Open the index file directly for writing
-    FILE *f = fopen(".pes/index", "w");
-    if (!f) return -1;
+    char temp_path[] = ".pes/index.tmpXXXXXX";
+    int fd = mkstemp(temp_path);
+    if (fd < 0) return -1;
 
-    // We don't necessarily need to sort for the lab to pass status
-    for (int i = 0; i < index->count; i++) {
-        const IndexEntry *e = &index->entries[i];
+    FILE *f = fdopen(fd, "w");
+    if (!f) {
+        close(fd);
+        return -1;
+    }
+
+    Index sorted = *index;
+    qsort(sorted.entries, sorted.count, sizeof(IndexEntry), compare_paths);
+
+    for (int i = 0; i < sorted.count; i++) {
+        const IndexEntry *e = &sorted.entries[i];
         char hash_hex[HASH_SIZE * 2 + 1];
         hash_to_hex(&e->hash, hash_hex);
-        
-        // Match the exact format the lab expects
-        fprintf(f, "%o %s %ld %u %s\n", 
+
+        fprintf(f, "%o %s %ld %u %s\n",
                 e->mode, hash_hex, (long)e->mtime_sec, e->size, e->path);
     }
 
+    fflush(f);
+    fsync(fd);
     fclose(f);
+
+    if (rename(temp_path, ".pes/index") != 0) {
+        unlink(temp_path);
+        return -1;
+    }
+
     return 0;
 }
 int index_add(Index *index, const char *path) {
