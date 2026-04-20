@@ -271,10 +271,39 @@ int index_status(const Index *index) {
 //
 // Returns 0 on success, -1 on error.
 int index_load(Index *index) {
-    // TODO: Implement index loading
-    // (See Lab Appendix for logical steps)
-    (void)index;
-    return -1;
+    index->count = 0;
+    FILE *f = fopen(".pes/index", "r");
+    if (!f) return 0;
+
+    char line[1024];
+    while (fgets(line, sizeof(line), f) && index->count < MAX_INDEX_ENTRIES) {
+        IndexEntry *e = &index->entries[index->count];
+        char hash_hex[HASH_HEX_LEN + 1];
+
+        // Fixed: Use %u for uint32_t size to avoid warnings/corruption
+        if (sscanf(line, "%o %64s %ld %u", &e->mode, hash_hex, &e->mtime_sec, &e->size) == 4) {
+            char *path_ptr = line;
+            for (int i = 0; i < 4; i++) {
+                char *next_space = strchr(path_ptr, ' ');
+                if (!next_space) break;
+                path_ptr = next_space + 1;
+            }
+            
+            if (path_ptr) {
+                path_ptr[strcspn(path_ptr, "\n\r")] = 0;
+                strncpy(e->path, path_ptr, sizeof(e->path) - 1);
+                e->path[sizeof(e->path)-1] = '\0';
+                hex_to_hash(hash_hex, &e->hash);
+                index->count++;
+            }
+        }
+    }
+    fclose(f);
+    return 0;
+}
+
+static int compare_paths(const void *a, const void *b) {
+    return strcmp(((IndexEntry *)a)->path, ((IndexEntry *)b)->path);
 }
 
 // Save the index to .pes/index atomically.
