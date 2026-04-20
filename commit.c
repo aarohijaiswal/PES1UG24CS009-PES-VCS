@@ -224,6 +224,11 @@ int head_update(const ObjectID *new_commit) {
     }
 
     free(data);
+    // 7. Update HEAD
+    if (head_update(commit_id_out) != 0) {
+        return -1;
+    }
+
 
     return 0;
 }
