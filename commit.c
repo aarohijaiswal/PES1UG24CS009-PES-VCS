@@ -191,7 +191,10 @@ int head_update(const ObjectID *new_commit) {
         return -1;
     }
 
-    
+    // 2. Read HEAD (parent commit)
+    if (head_read(&parent_id) == 0) {
+        has_parent = 1;
+    }
 
     return 0;
 }
