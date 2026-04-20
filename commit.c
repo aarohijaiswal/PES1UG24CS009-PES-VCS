@@ -217,6 +217,13 @@ int head_update(const ObjectID *new_commit) {
     if (commit_serialize(&commit, &data, &len) != 0) {
         return -1;
     }
+    // 6. Write commit object
+    if (object_write(OBJ_COMMIT, data, len, commit_id_out) != 0) {
+        free(data);
+        return -1;
+    }
+
+    free(data);
 
     return 0;
 }
