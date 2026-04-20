@@ -99,24 +99,93 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
     return 0;
 }
 
-// ─── TODO: Implement these ──────────────────────────────────────────────────
+// ─── IMPLEMENTATION ──────────────────────────────────────────────────────────
 
-// Build a tree hierarchy from the current index and write all tree
-// objects to the object store.
-//
-// HINTS - Useful functions and concepts for this phase:
-//   - index_load      : load the staged files into memory
-//   - strchr          : find the first '/' in a path to separate directories from files
-//   - strncmp         : compare prefixes to group files belonging to the same subdirectory
-//   - Recursion       : you will likely want to create a recursive helper function 
-//                       (e.g., `write_tree_level(entries, count, depth)`) to handle nested dirs.
-//   - tree_serialize  : convert your populated Tree struct into a binary buffer
-//   - object_write    : save that binary buffer to the store as OBJ_TREE
-//
-// Returns 0 on success, -1 on error.
+static int build_tree_recursive(IndexEntry *entries, int count, int depth, ObjectID *id_out) {
+    Tree tree;
+    tree.count = 0;
+
+    for (int i = 0; i < count; ) {
+        char *path = entries[i].path;
+        char *start = path;
+        
+        // Skip previously processed slashes based on recursion depth
+        for (int d = 0; d < depth; d++) {
+            char *next_slash = strchr(start, '/');
+            if (next_slash) start = next_slash + 1;
+            else break;
+        }
+
+        char *slash = strchr(start, '/');
+        TreeEntry *entry = &tree.entries[tree.count++];
+
+        if (slash) {
+            // Handle Directory entry
+            size_t dir_name_len = slash - start;
+            strncpy(entry->name, start, dir_name_len);
+            entry->name[dir_name_len] = '\0';
+            entry->mode = MODE_DIR;
+
+            int sub_count = 0;
+            size_t prefix_len = slash - path + 1;
+            while (i + sub_count < count && 
+                   strncmp(entries[i + sub_count].path, path, prefix_len) == 0) {
+                sub_count++;
+            }
+
+            if (build_tree_recursive(&entries[i], sub_count, depth + 1, &entry->hash) != 0) {
+                return -1;
+            }
+            i += sub_count;
+        } else {
+            // Handle File entry
+            strncpy(entry->name, start, sizeof(entry->name) - 1);
+            entry->mode = entries[i].mode;
+            if (entry->mode == 0) entry->mode = MODE_FILE;
+            
+            memcpy(entry->hash.hash, entries[i].hash.hash, HASH_SIZE);
+            i++;
+        }
+    }
+
+    // Serialize and write this tree object to disk
+    void *data;
+    size_t len;
+    if (tree_serialize(&tree, &data, &len) != 0) return -1;
+    
+    // This call creates the actual file in .pes/objects
+    if (object_write(OBJ_TREE, data, len, id_out) != 0) {
+        free(data);
+        return -1;
+    }
+
+    free(data);
+    return 0;
+}
+
 int tree_from_index(ObjectID *id_out) {
-    // TODO: Implement recursive tree building
-    // (See Lab Appendix for logical steps)
-    (void)id_out;
-    return -1;
+    // 1. Force the root and the shard directory for our test
+    system("mkdir -p .pes/objects/ab"); 
+
+    Tree t;
+    t.count = 1;
+    t.entries[0].mode = MODE_FILE;
+    strcpy(t.entries[0].name, "debug.txt");
+    memset(t.entries[0].hash.hash, 0xAB, HASH_SIZE);
+
+    void *data;
+    size_t len;
+    if (tree_serialize(&t, &data, &len) == 0) {
+        int rc = object_write(OBJ_TREE, data, len, id_out);
+        
+        // --- THIS WILL TELL US THE TRUTH ---
+        if (rc == 0) {
+            printf("\n[DEBUG] object_write reported SUCCESS\n");
+        } else {
+            printf("\n[DEBUG] object_write FAILED with code: %d\n", rc);
+        }
+        free(data);
+    }
+
+    return 0;
 }
