@@ -197,6 +197,20 @@ int head_update(const ObjectID *new_commit) {
     }
       // 3. Get author
     const char *author = pes_author();
+    // 4. Build commit struct
+    Commit commit;
+    memset(&commit, 0, sizeof(commit));
+
+    commit.tree = tree_id;
+    if (has_parent) {
+        commit.parent = parent_id;
+        commit.has_parent = 1;
+    }
+
+    strncpy(commit.author, author, sizeof(commit.author) - 1);
+    commit.timestamp = time(NULL);
+
+    strncpy(commit.message, message, sizeof(commit.message) - 1);
 
     return 0;
 }
